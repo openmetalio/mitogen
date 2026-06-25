@@ -888,7 +888,21 @@ class NewStyleRunner(ScriptRunner):
         # I think "custom" means "found in custom module_utils search path",
         # e.g. playbook relative dir, ~/.ansible/..., Ansible collection.
         for fullname, _, _ in self.module_map['custom']:
-            mitogen.core.import_module(fullname)
+            try:
+                mitogen.core.import_module(fullname)
+            except ImportError:
+                # A custom module_util may be discovered statically (e.g. via a
+                # conditional `import` inside the module body) yet only be used
+                # on some code paths. It can legitimately fail to import here if
+                # it has an optional third-party dependency that isn't installed
+                # (e.g. kolla-ansible's podman worker on a Docker-only host).
+                # Vanilla Ansible imports module_utils lazily and never hits
+                # this, so mirror that: defer to runtime rather than aborting
+                # the whole module. If the module_util is genuinely needed, the
+                # importer remains on sys.meta_path and the import is retried,
+                # failing with a precise error, at its real call site.
+                LOG.debug('Deferring preload of custom module_util %r: %s',
+                          fullname, sys.exc_info()[1])
 
         # I think "builtin" means "part of ansible/ansible-base/ansible-core",
         # as opposed to Python builtin modules such as sys.
