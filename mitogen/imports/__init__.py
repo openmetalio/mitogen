@@ -18,8 +18,8 @@ def codeobj_imports(co):
     """
     Yield (level, modname, names) tuples by scanning the code object `co`.
 
-    Top level `import mod` & `from mod import foo` statements are matched.
-    Those inside a `class ...` or `def ...` block are currently skipped.
+    `import mod` & `from mod import foo` statements are matched at all
+    levels, including inside `def ...` and `class ...` blocks.
 
     >>> co = compile('import a, b; from c import d, e as f', '<str>', 'exec')
     >>> list(codeobj_imports(co))  # doctest: +ELLIPSIS
@@ -35,4 +35,9 @@ def codeobj_imports(co):
         * `modname`: Name of module to import, or to import `names` from.
         * `names`: tuple of names in `from mod import ..`.
     """
-    return _code_imports(co.co_code, co.co_consts, co.co_names)
+    for item in _code_imports(co.co_code, co.co_consts, co.co_names):
+        yield item
+    for const in co.co_consts:
+        if hasattr(const, 'co_code'):
+            for item in codeobj_imports(const):
+                yield item
