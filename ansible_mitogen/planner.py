@@ -424,12 +424,23 @@ class NewStylePlanner(ScriptPlanner):
         )
 
     def get_search_path(self):
-        return tuple(
-            path
-            for path in ansible_mitogen.loaders.module_utils_loader._get_paths(
-                subdirs=False
-            )
+        paths = list(
+            ansible_mitogen.loaders.module_utils_loader._get_paths(subdirs=False)
         )
+        seen = set(paths)
+
+        # Also search for module_utils adjacent to the module being executed.
+        # Handles legacy playbook layouts (e.g. kolla-ansible) where module_utils/
+        # is a sibling of the library/ dir that contains the module, rather than a
+        # path registered with Ansible's module_utils_loader.
+        module_dir = os.path.normpath(os.path.dirname(self._inv.module_path))
+        for base_dir in (module_dir, os.path.dirname(module_dir)):
+            candidate = os.path.join(base_dir, 'module_utils')
+            if os.path.isdir(candidate) and candidate not in seen:
+                paths.append(candidate)
+                seen.add(candidate)
+
+        return tuple(paths)
 
     _module_map = None
 
